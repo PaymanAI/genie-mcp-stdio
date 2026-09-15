@@ -4,6 +4,14 @@
   "description": "Genie for any stdio-only MCP host: a local stdio bridge to the remote Genie MCP server",
   "license": "MIT",
   "author": "Payman",
+  "homepage": "https://github.com/PaymanAI/genie-mcp-stdio#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PaymanAI/genie-mcp-stdio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PaymanAI/genie-mcp-stdio/issues"
+  },
   "type": "module",
   "bin": {
     "genie-mcp-stdio": "dist/src/index.js"
