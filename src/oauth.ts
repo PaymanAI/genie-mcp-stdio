@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { spawn } from "node:child_process";
 import {
   auth,
@@ -37,6 +37,8 @@ export class GenieAccountProvider implements OAuthClientProvider {
   private verifier: string | undefined;
   private port: number | undefined;
   private pendingState: string | undefined;
+  private listener: Server | undefined;
+  private pending: { resolve: (code: string) => void; reject: (error: Error) => void } | undefined;
   private inflightRefresh: { token: string; response: Promise<Response> } | undefined;
 
   constructor(
@@ -122,11 +124,15 @@ export class GenieAccountProvider implements OAuthClientProvider {
     return (await this.inflightRefresh.response).clone();
   };
 
-  /** Interactive sign-in: loopback listener, browser, code exchange, tokens saved. */
+  /**
+   * Interactive sign-in: loopback listener, browser, code exchange, tokens saved. The
+   * listener stays open afterwards (same port) so a browser that arrives after a timeout
+   * gets an explanation page rather than a refused connection.
+   */
   async signIn(timeoutMs = SIGN_IN_TIMEOUT_MS): Promise<void> {
-    const listener = await this.listen();
+    await this.listen();
     try {
-      const codePromise = this.awaitCode(listener, timeoutMs);
+      const codePromise = this.awaitCode(timeoutMs);
       const started = await auth(this, { serverUrl: this.server, scope: SCOPE });
       if (started === "AUTHORIZED") return;
       const code = await codePromise;
@@ -134,10 +140,18 @@ export class GenieAccountProvider implements OAuthClientProvider {
       if (finished !== "AUTHORIZED") throw new Error("Genie did not complete the sign-in");
       this.log("Signed in to Genie.");
     } finally {
-      this.port = undefined;
+      this.pending = undefined;
+      this.pendingState = undefined;
       this.verifier = undefined;
-      await new Promise<void>((resolve) => listener.close(() => resolve()));
     }
+  }
+
+  /** Stops the loopback listener; a later signIn starts a fresh one. */
+  async close(): Promise<void> {
+    const listener = this.listener;
+    this.listener = undefined;
+    this.port = undefined;
+    if (listener !== undefined) await new Promise<void>((resolve) => listener.close(() => resolve()));
   }
 
   /** Ends the refresh-token family at Genie (RFC 7009) and forgets the local copy. */
@@ -165,44 +179,80 @@ export class GenieAccountProvider implements OAuthClientProvider {
     return true;
   }
 
-  private listen(): Promise<Server> {
+  private listen(): Promise<void> {
+    if (this.listener !== undefined) return Promise.resolve();
     return new Promise((resolve, reject) => {
-      const server = createServer();
+      const server = createServer((request, response) => this.callback(request, response));
+      // Never keeps a `login` process alive on its own once the sign-in has finished or failed.
+      server.unref();
       server.once("error", reject);
       server.listen(0, "127.0.0.1", () => {
         const address = server.address();
         if (address === null || typeof address === "string") return reject(new Error("no loopback port"));
         this.port = address.port;
-        resolve(server);
+        this.listener = server;
+        resolve();
       });
     });
   }
 
-  private awaitCode(listener: Server, timeoutMs: number): Promise<string> {
+  private awaitCode(timeoutMs: number): Promise<string> {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("Timed out waiting for the browser sign-in")), timeoutMs);
-      listener.on("request", (request, response) => {
-        const url = new URL(request.url ?? "/", "http://127.0.0.1");
-        if (url.pathname !== CALLBACK_PATH) {
-          response.writeHead(404).end();
-          return;
-        }
-        const code = url.searchParams.get("code");
-        const state = url.searchParams.get("state");
-        const error = url.searchParams.get("error");
-        const ok = code !== null && state !== null && state === this.pendingState && error === null;
-        response.writeHead(ok ? 200 : 400, { "content-type": "text/html; charset=utf-8" });
-        response.end(
-          ok
-            ? "<!doctype html><title>Genie</title><p>Signed in. You can close this tab and return to your agent.</p>"
-            : `<!doctype html><title>Genie</title><p>Sign-in failed: ${escapeHtml(error ?? "invalid callback")}</p>`,
-        );
-        clearTimeout(timer);
-        if (ok) resolve(code);
-        else reject(new Error(`Genie sign-in failed: ${error ?? "invalid callback"}`));
-      });
+      const timer = setTimeout(() => {
+        this.pending = undefined;
+        reject(new Error(`Timed out after ${Math.round(timeoutMs / 60_000)} minutes waiting for the browser sign-in`));
+      }, timeoutMs);
+      this.pending = {
+        resolve: (code) => {
+          clearTimeout(timer);
+          resolve(code);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      };
     });
   }
+
+  private callback(request: IncomingMessage, response: ServerResponse): void {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    if (url.pathname !== CALLBACK_PATH) {
+      response.writeHead(404).end();
+      return;
+    }
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const error = url.searchParams.get("error");
+    const pending = this.pending;
+    if (pending === undefined || state !== this.pendingState) {
+      response.writeHead(410, HTML).end(page(
+        "This sign-in expired.",
+        "Your agent waited for you to finish signing in, then gave up. Nothing was connected. " +
+          "Go back to your agent and ask it to connect to Genie again; the next sign-in will be quicker.",
+      ));
+      return;
+    }
+    if (code === null || error !== null) {
+      response.writeHead(400, HTML).end(page("Sign-in failed.", `Genie reported: ${escapeHtml(error ?? "invalid callback")}. You can close this tab.`));
+      pending.reject(new Error(`Genie sign-in failed: ${error ?? "invalid callback"}`));
+      return;
+    }
+    response.writeHead(200, HTML).end(page("Signed in.", "You can close this tab and return to your agent."));
+    pending.resolve(code);
+  }
+}
+
+const HTML = { "content-type": "text/html; charset=utf-8" };
+
+function page(title: string, body: string): string {
+  return (
+    "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>" +
+    `<title>Genie — ${escapeHtml(title)}</title>` +
+    "<body style='margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f4ef;font:16px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;color:#1f3a3d'>" +
+    "<main style='max-width:32rem;padding:2rem;background:#fbfaf7;border:1px solid #e3e0d8;border-radius:12px'>" +
+    `<h1 style='margin:0 0 .5rem;font-size:1.6rem'>${escapeHtml(title)}</h1><p style='margin:0'>${body}</p></main>`
+  );
 }
 
 function refreshTokenIn(body: BodyInit | null | undefined): string | undefined {

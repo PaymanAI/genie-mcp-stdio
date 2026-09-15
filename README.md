@@ -89,8 +89,9 @@ first message doesn't stall on a browser.
 ### 4. Verify
 
 Restart the host (or reload its MCP servers). Confirm a server named `genie` exposing the
-tool `ask_genie` appears. Then have the user (or the host's agent) send Genie a harmless
-message such as "what can you do?" and check that a reply comes back. On first use Genie
+tool `ask_genie` appears. Its single argument is `request` — the person's ask, in plain
+words (`{"request": "what can you help me with?"}`). Have the user (or the host's agent)
+send Genie a harmless request like that and check that a reply comes back. On first use Genie
 asks the user to connect a finance provider — that is expected and happens in Genie's own
 UI, not in the host.
 
@@ -141,6 +142,12 @@ authorization code with S256 PKCE, a loopback redirect on a random port (RFC 825
 use. Access tokens last one hour and are renewed silently; you only see the browser again
 if you have not used Genie for 90 days, sign out, or Genie revokes the sign-in.
 
+The browser has fifteen minutes to finish. If it takes longer, the bridge stops waiting
+but keeps its loopback port open, so a late browser sees "This sign-in expired" with what
+to do next rather than a refused connection; and if the port *is* gone (a `login` command
+that already exited), Genie's own page notices you came back and explains the same thing.
+Either way nothing was connected, and asking the agent again starts a fresh sign-in.
+
 The refresh token is stored in `~/.config/genie-mcp-stdio/credentials.json`
 (`$XDG_CONFIG_HOME` respected), mode `0600`, keyed by Genie URL. It is never written to a
 host's configuration, tool output or logs. `logout` revokes it at Genie (RFC 7009) before
@@ -164,8 +171,8 @@ Setting both bypass variables is refused, because Genie refuses a request that c
 
 ## What the host sees
 
-- Tools: whatever Genie lists — today exactly `ask_genie`. `tools/list_changed` is
-  forwarded.
+- Tools: whatever Genie lists — today exactly `ask_genie`, which takes one argument,
+  `request`: what the person wants, in plain words. `tools/list_changed` is forwarded.
 - Elicitation: Genie asks the person to connect their account and pick a finance
   provider on first use. If the host declared the `elicitation` capability the prompt
   is relayed to it; otherwise Genie's reply explains what to do instead.

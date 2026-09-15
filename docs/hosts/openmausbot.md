@@ -65,6 +65,7 @@ machine to someone else.
 | Symptom | Meaning |
 |---|---|
 | The bot's first Genie message hangs | The browser sign-in is waiting; look for the window, or check the bridge's stderr for the URL. It gives up after fifteen minutes. |
+| Browser shows "This sign-in expired" or "… stopped waiting" | You finished after the bridge gave up. Nothing was connected; send the bot the message again and approve sooner. |
 | `Genie no longer accepts the stored sign-in; signing in again.` | The refresh token expired or was revoked; the browser opens again. |
 | Tool call fails with `Genie rejected the bridge credential (HTTP 401)` | Only in the explicit `GENIE_ACCESS_TOKEN` / `GENIE_INTEGRATION_KEY` modes: the value is wrong or revoked. Nothing about it is logged. |
 | `Could not reach Genie` | Network, or a non-default `GENIE_MCP_URL`. |

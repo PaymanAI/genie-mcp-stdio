@@ -68,6 +68,7 @@ export class GenieBridge {
 
   async close(): Promise<void> {
     await this.closeRemote();
+    await this.account?.close();
     await this.server.close();
   }
 
