@@ -4,9 +4,16 @@ import { after, before, describe, test } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { ElicitRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
+import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
+import { FakeAuthServer } from "./fakeAuthServer.js";
 import { FakeGenie } from "./fixture.js";
 
 const BIN = fileURLToPath(new URL("../src/index.js", import.meta.url));
+const BROWSER = fileURLToPath(new URL("./browser.js", import.meta.url));
 
 async function hostFor(env: Record<string, string>, elicitation = false): Promise<Client> {
   const host = new Client({ name: "host", version: "0" }, { capabilities: elicitation ? { elicitation: {} } : {} });
@@ -97,9 +104,60 @@ describe("rejected credential", () => {
   });
 });
 
-test("exits with a config error and no server when no credential is set", async () => {
-  const { spawnSync } = await import("node:child_process");
-  const run = spawnSync(process.execPath, [BIN], { env: cleanEnv(), encoding: "utf8" });
+describe("signed-in account mode", () => {
+  const authServer = new FakeAuthServer();
+  const genie = new FakeGenie((h) => authServer.acceptsBearer(h.authorization as string | undefined), false, authServer);
+  const credentialsFile = join(mkdtempSync(join(tmpdir(), "genie-mcp-stdio-")), "credentials.json");
+  let url: URL;
+  let host: Client;
+  const env = (): Record<string, string> => ({
+    GENIE_MCP_URL: url.href,
+    GENIE_CREDENTIALS_FILE: credentialsFile,
+    GENIE_BROWSER_COMMAND: `${process.execPath} ${BROWSER}`,
+  });
+  before(async () => {
+    url = await genie.start();
+    host = await hostFor(env());
+  });
+  after(async () => {
+    await host.close();
+    await genie.stop();
+  });
+
+  test("signs in through the browser on first use and stores only a 0600 file", async () => {
+    assert.equal(existsSync(credentialsFile), false);
+    const result = await host.callTool({ name: "ask_genie", arguments: { message: "balance?" } });
+    assert.deepEqual(result.content, [{ type: "text", text: "genie heard: balance?" }]);
+    assert.equal(statSync(credentialsFile).mode & 0o777, 0o600);
+    const stored = JSON.parse(readFileSync(credentialsFile, "utf8")) as Record<string, { refresh_token: string }>;
+    assert.equal(stored[url.href]?.refresh_token, "refresh-1");
+    assert.equal(genie.seen.at(-1)?.headers.authorization, "Bearer access-1");
+  });
+
+  test("refreshes silently when Genie stops accepting the access token", async () => {
+    // The bridge's standalone SSE stream may also hit the 401 and refresh once on its own,
+    // so assert on the newest issued pair rather than on fixed numbering.
+    const before = authServer.issued.length;
+    authServer.expireAccessTokens();
+    const result = await host.callTool({ name: "ask_genie", arguments: { message: "again" } });
+    assert.deepEqual(result.content, [{ type: "text", text: "genie heard: again" }]);
+    assert.ok(authServer.issued.length > before);
+    assert.equal(genie.seen.at(-1)?.headers.authorization, `Bearer ${authServer.issued.at(-1)}`);
+    const stored = JSON.parse(readFileSync(credentialsFile, "utf8")) as Record<string, { refresh_token: string }>;
+    assert.equal(stored[url.href]?.refresh_token, authServer.latestRefresh);
+  });
+
+  test("logout revokes the refresh token at Genie and deletes the file", async () => {
+    // Asynchronous: the fake Genie answering the revocation lives in this same process.
+    const run = await promisify(execFile)(process.execPath, [BIN, "logout"], { env: { ...cleanEnv(), ...env() } });
+    assert.deepEqual(authServer.revoked, [authServer.latestRefresh]);
+    assert.equal(existsSync(credentialsFile), false);
+    assert.match(run.stderr, /Signed out/);
+  });
+});
+
+test("an unknown command prints usage and exits 2", () => {
+  const run = spawnSync(process.execPath, [BIN, "frobnicate"], { env: cleanEnv(), encoding: "utf8" });
   assert.equal(run.status, 2);
-  assert.match(run.stderr, /No Genie credential/);
+  assert.match(run.stderr, /usage: genie-mcp-stdio/);
 });

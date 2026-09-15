@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import type { FakeAuthServer } from "./fakeAuthServer.js";
 
 export interface SeenRequest {
   headers: Record<string, string | string[] | undefined>;
@@ -24,6 +25,7 @@ export class FakeGenie {
   constructor(
     private readonly accepts: (headers: IncomingMessage["headers"]) => boolean,
     private readonly elicitBeforeAnswer = false,
+    private readonly authServer: FakeAuthServer | undefined = undefined,
   ) {}
 
   async start(): Promise<URL> {
@@ -33,6 +35,7 @@ export class FakeGenie {
     await new Promise<void>((resolve) => this.http!.listen(0, "127.0.0.1", resolve));
     const address = this.http.address();
     if (address === null || typeof address === "string") throw new Error("no port");
+    this.authServer?.bind(`http://127.0.0.1:${address.port}`);
     return new URL(`http://127.0.0.1:${address.port}/mcp`);
   }
 
@@ -44,11 +47,15 @@ export class FakeGenie {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (this.authServer !== undefined && (await this.authServer.handle(req, res))) return;
     this.seen.push({ headers: req.headers });
     const authorizations = headerCount(req, "authorization");
     const keys = headerCount(req, "x-paygent-mcp-access-key");
     if (authorizations + keys !== 1 || !this.accepts(req.headers)) {
-      res.writeHead(401, { "www-authenticate": 'Bearer resource_metadata="http://fake/.well-known/oauth-protected-resource/mcp"' });
+      const origin = `http://${req.headers.host ?? "127.0.0.1"}`;
+      res.writeHead(401, {
+        "www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp", scope="yuki:ask"`,
+      });
       res.end();
       return;
     }
