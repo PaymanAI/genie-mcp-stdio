@@ -17,7 +17,8 @@ import type { CredentialStore } from "./credentials.js";
 export const DEFAULT_CLIENT_ID = "genie-mcp-stdio";
 export const SCOPE = "yuki:ask";
 const CALLBACK_PATH = "/callback";
-const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
+// A first sign-in can include account creation and a passkey; five minutes proved too short.
+const SIGN_IN_TIMEOUT_MS = 15 * 60 * 1000;
 
 export type Log = (message: string) => void;
 

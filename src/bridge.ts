@@ -21,7 +21,7 @@ import { CredentialStore } from "./credentials.js";
 import { GenieAccountProvider } from "./oauth.js";
 
 export const BRIDGE_NAME = "genie-mcp-stdio";
-export const BRIDGE_VERSION = "0.2.0";
+export const BRIDGE_VERSION = "0.2.1";
 
 export type Log = (message: string) => void;
 

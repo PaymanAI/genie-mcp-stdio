@@ -82,7 +82,7 @@ npx -y @paymanai/genie-mcp-stdio login
 
 It prints `Signed in to Genie.` and `Sign-in stored in …/genie-mcp-stdio/credentials.json`
 on success. If no browser opens, give the user the URL printed after
-`Sign in to Genie in your browser:`. It waits up to five minutes. You can skip this step —
+`Sign in to Genie in your browser:`. It waits up to fifteen minutes. You can skip this step —
 the bridge signs in on the first tool call instead — but running it now means the user's
 first message doesn't stall on a browser.
 
@@ -128,7 +128,7 @@ tool output or logs.
 | Command | What it does |
 |---|---|
 | `npx -y @paymanai/genie-mcp-stdio` | Serve Genie over stdio. This is what hosts run. |
-| `npx -y @paymanai/genie-mcp-stdio login` | Sign in now: opens the browser, waits up to five minutes for the callback, stores the sign-in. |
+| `npx -y @paymanai/genie-mcp-stdio login` | Sign in now: opens the browser, waits up to fifteen minutes for the callback, stores the sign-in. |
 | `npx -y @paymanai/genie-mcp-stdio logout` | Revoke the sign-in at Genie and delete the local copy. |
 
 All diagnostics go to stderr, prefixed `[genie-mcp-stdio]`; stdout is reserved for MCP.
