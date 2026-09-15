@@ -14,7 +14,17 @@ It decides nothing. You sign in to your own Genie account once in the browser; t
 keeps that sign-in in a private file and never puts a secret in a host's configuration,
 tool output or logs.
 
+## Requirements
+
+- Node.js 20 or newer on the machine running the host (`npx` comes with it).
+- A Genie account — the sign-in page offers to create one.
+- An MCP host that launches stdio servers. That is every host below; if yours can
+  connect to remote MCP URLs directly, you don't need this bridge — see
+  [Integrating Genie without the bridge](#integrating-genie-without-the-bridge).
+
 ## Quick start
+
+Add this server to your host, then talk to the agent:
 
 ```json
 {
@@ -29,26 +39,67 @@ tool output or logs.
 
 No secrets in the config. The first time the agent calls Genie, the bridge opens your
 browser to sign in to your Genie account and approve the connection; after that it keeps
-you signed in. To sign in ahead of time (or on a machine where the host can't reach your
-browser), run:
+you signed in. Ask the agent anything Genie can do — “pay my rent from checking”, “what
+did I spend at Lyft last month” — and it calls `ask_genie`.
+
+To sign in ahead of time (or on a machine where the host can't reach your browser), run:
 
 ```bash
 npx -y @paymanai/genie-mcp-stdio login
 ```
 
-and to end the sign-in — locally and at Genie — run `npx -y @paymanai/genie-mcp-stdio logout`.
+## Host-by-host
 
-That block works, as-is, in:
+### OpenMausBot
 
-| Host | Where it goes |
+Settings → **Custom MCP servers** → add `genie` with command `npx` and arguments
+`-y @paymanai/genie-mcp-stdio`, or paste the Quick start block into
+`~/.openmausbot/config.json`. Then enable `genie` in the bot's **Tools**. Full walkthrough
+with troubleshooting: [docs/hosts/openmausbot.md](docs/hosts/openmausbot.md).
+
+### Claude Desktop
+
+Paste the Quick start block into `claude_desktop_config.json` (Claude → Settings →
+Developer → Edit Config), which lives at:
+
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+Restart Claude Desktop; Genie appears under the tools icon.
+
+### Cursor
+
+Paste the Quick start block into `~/.cursor/mcp.json` (all projects) or
+`.cursor/mcp.json` in a project. Cursor supports MCP elicitation, so Genie's
+“connect a finance provider” prompt appears in the chat.
+
+### Codex CLI
+
+Codex configures MCP servers in TOML. Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.genie]
+command = "npx"
+args = ["-y", "@paymanai/genie-mcp-stdio"]
+```
+
+### Any other stdio host
+
+The bridge is a plain stdio MCP server: `command` is `npx`, `args` are
+`-y @paymanai/genie-mcp-stdio`, no environment variables. If your host lets you set a
+working directory, any directory is fine. If it runs servers without access to your
+desktop session (a daemon, a container), run `login` once from a terminal as the same
+user first, or set `GENIE_CREDENTIALS_FILE` to a path both can read.
+
+## Commands
+
+| Command | What it does |
 |---|---|
-| OpenMausBot | `~/.openmausbot/config.json` — or Settings → Custom MCP servers. See [docs/hosts/openmausbot.md](docs/hosts/openmausbot.md). |
-| Claude Desktop | `claude_desktop_config.json` |
-| Cursor | `.cursor/mcp.json` |
-| Codex CLI | `~/.codex/config.toml` (`[mcp_servers.genie]`, same `command`/`args` keys) |
+| `npx -y @paymanai/genie-mcp-stdio` | Serve Genie over stdio. This is what hosts run. |
+| `npx -y @paymanai/genie-mcp-stdio login` | Sign in now: opens the browser, waits up to five minutes for the callback, stores the sign-in. |
+| `npx -y @paymanai/genie-mcp-stdio logout` | Revoke the sign-in at Genie and delete the local copy. |
 
-Then ask the agent anything Genie can do — “pay my rent from checking”, “what did I
-spend at Lyft last month” — and it calls `ask_genie`.
+All diagnostics go to stderr, prefixed `[genie-mcp-stdio]`; stdout is reserved for MCP.
 
 ## How the sign-in works
 
@@ -102,6 +153,37 @@ Setting both bypass variables is refused, because Genie refuses a request that c
   treats a second use of a rotated refresh token as a replay that revokes the sign-in.
 - `logout` when you stop using a machine; the sign-in is then dead at Genie, not just
   deleted locally.
+
+## Integrating Genie without the bridge
+
+If you maintain a host and want to connect to Genie's remote MCP server directly — the
+better long-term answer, and the one OpenMausBot has on its roadmap — here is what Genie
+expects. It is standard MCP authorization; nothing here is Genie-specific except the
+client registration.
+
+1. **Transport.** Streamable HTTP at `https://genie.paymanai.com/mcp`. POSTs answer with
+   JSON; notifications and elicitation requests arrive on the standalone `GET` SSE stream,
+   so open it after `initialize`. Sessions are bound to the authenticated caller via
+   `Mcp-Session-Id`; a new process needs a new session.
+2. **Discovery.** An unauthenticated request returns `401` with
+   `WWW-Authenticate: Bearer resource_metadata="https://genie.paymanai.com/.well-known/oauth-protected-resource/mcp", scope="yuki:ask"`
+   (RFC 9728). That document names the authorization server, whose RFC 8414 metadata lists
+   the authorize, token, revocation and JWKS endpoints.
+3. **Authorization.** Authorization code with S256 PKCE, `token_endpoint_auth_method: none`,
+   scope `yuki:ask`, and the `resource` parameter set to the MCP URL (RFC 8707). There is no
+   dynamic client registration: **ask us to preregister your host** with its `client_id`,
+   display name and exact redirect URIs (open an issue on this repository). Registered
+   loopback redirects for native apps match on any port; everything else matches exactly.
+   Native clients receive a refresh token (90 days sliding, rotated on every use — send the
+   new one back next time, and never reuse an old one, which Genie treats as a replay and
+   revokes the sign-in). Access tokens are one-hour ES256 JWTs.
+4. **Elicitation.** Declare the `elicitation` capability if you can render a form: Genie
+   uses it once per account to have the person connect a finance provider, and carries a
+   `connectionUrl` in `_meta` you may open for them. Without it, `ask_genie` replies with
+   instructions instead.
+5. **Test against the real thing.** This bridge's [`test/fixture.ts`](test/fixture.ts) and
+   [`test/fakeAuthServer.ts`](test/fakeAuthServer.ts) are a faithful local stand-in for the
+   above if you want an offline test; the production server behaves the same way.
 
 ## Development
 
