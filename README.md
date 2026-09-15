@@ -94,7 +94,7 @@ tool `ask_genie` appears. Its single argument is `request` — the person's ask,
 words (`{"request": "what can you help me with?"}`). Have the user (or the host's agent)
 send Genie a harmless request like that and check that a reply comes back. On first use Genie
 asks the user to connect a finance provider — that is expected and happens in Genie's own
-UI, not in the host.
+UI, not in the host. If the request fails, see [Troubleshooting](#troubleshooting).
 
 ### 5. Report back
 
@@ -182,6 +182,33 @@ Setting both bypass variables is refused, because Genie refuses a request that c
   token value. The bridge starts even when Genie is unreachable, so a problem shows up on
   the first call rather than as a silent missing server. If Genie stops accepting the
   stored sign-in, the bridge opens the browser again rather than failing.
+
+## Troubleshooting
+
+### OpenMausBot on macOS: every bot reply fails with "MCP server could not start"
+
+The full message is `MCP server could not start; check its command and installation`, and it
+appears even though the server's **Test** button in OpenMausBot lists `ask_genie`.
+OpenMausBot's chat starts MCP servers without the user's shell `PATH`, so it cannot find
+`npx`; its **Test** button adds that `PATH`, which is why the test passes.
+
+The fix is an `env` that holds only `PATH` on the `genie` entry. This is the one exception to
+"Add no `env` block" above. Print the value in the user's shell:
+
+```bash
+printf '%s:/usr/bin:/bin:/usr/sbin:/sbin\n' "$(dirname "$(command -v npx)")"
+```
+
+Add it to the entry in `~/.openmausbot/config.json`:
+
+```json
+"env": { "PATH": "<the line printed above>" }
+```
+
+Then have the user quit OpenMausBot (Cmd+Q) and open it again, without changing MCP servers
+in the app first: a hand edit needs the restart, and an in-app MCP change before then writes
+the old entry back. People doing this by hand can follow
+[docs/hosts/openmausbot.md](docs/hosts/openmausbot.md#bot-replies-fail-with-mcp-server-could-not-start).
 
 ## Security notes
 

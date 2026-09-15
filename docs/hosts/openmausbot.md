@@ -10,7 +10,7 @@ that gap so any bot in the sidebar can call Genie.
 
 ## 1. Add the server
 
-Either open **Settings → Custom MCP servers** and add a server named `genie` with command
+Either open **Plugins → MCP servers** and add a server named `genie` with command
 `npx` and arguments `-y @paymanai/genie-mcp-stdio` — no environment variables — or write
 the same thing into `~/.openmausbot/config.json`:
 
@@ -70,6 +70,7 @@ machine to someone else.
 | Tool call fails with `Genie rejected the bridge credential (HTTP 401)` | Only in the explicit `GENIE_ACCESS_TOKEN` / `GENIE_INTEGRATION_KEY` modes: the value is wrong or revoked. Nothing about it is logged. |
 | `Could not reach Genie` | Network, or a non-default `GENIE_MCP_URL`. |
 | Browser does not open | Set `GENIE_BROWSER_COMMAND` to a command that opens URLs, or copy the URL from the bridge's stderr. |
+| Every bot reply fails with `MCP server could not start; check its command and installation`, even though **Test** lists `ask_genie` | On macOS, OpenMausBot's chat cannot find `npx`. See [the fix below](#bot-replies-fail-with-mcp-server-could-not-start). |
 
 Run the bridge by hand to see its stderr:
 
@@ -78,3 +79,25 @@ npx -y @paymanai/genie-mcp-stdio
 ```
 
 It prints one `Serving Genie over stdio from …` line and waits for a host on stdin.
+
+### Bot replies fail with "MCP server could not start"
+
+On macOS, OpenMausBot's chat starts MCP servers without your terminal's `PATH`, so it cannot
+find `npx`. The **Test** button adds your `PATH`, which is why it still lists `ask_genie`.
+Give the `genie` entry a `PATH` variable:
+
+1. Print the value in Terminal:
+
+   ```bash
+   printf '%s:/usr/bin:/bin:/usr/sbin:/sbin\n' "$(dirname "$(command -v npx)")"
+   ```
+
+   It prints one line, like `/Users/you/.nvm/versions/node/v24.0.0/bin:/usr/bin:/bin:/usr/sbin:/sbin`.
+   It is not a secret.
+2. Add it to the server. In **Plugins → MCP servers**, edit `genie` and add the variable
+   `PATH=<the printed line>`. Or add `"env": { "PATH": "<the printed line>" }` to the `genie`
+   entry in `~/.openmausbot/config.json`, then quit OpenMausBot (Cmd+Q) and open it again: a
+   hand edit needs that restart, and saving any MCP change in the app before it writes the
+   old entry back.
+3. Send the bot a message again. If you switch Node versions later, repeat step 1 and update
+   the value.
