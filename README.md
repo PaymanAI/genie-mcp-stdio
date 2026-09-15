@@ -1,6 +1,6 @@
 # genie-mcp-stdio
 
-Genie for any stdio-only MCP host.
+Genie for any MCP host that runs local stdio servers.
 
 > **Using an AI coding agent? Don't read this — hand it over.** Paste this into
 > Claude Code, Codex, Cursor, or whatever you use:
@@ -67,10 +67,11 @@ command = "npx"
 args = ["-y", "@paymanai/genie-mcp-stdio"]
 ```
 
-If the host supports remote MCP URLs natively with OAuth (some do), you may instead add
-`https://genie.paymanai.com/mcp` as a remote server — but only if the host lets Genie
-preregister its client id; see [Integrating Genie without the bridge](#integrating-genie-without-the-bridge).
-When in doubt, use the bridge above; it works everywhere.
+Claude Code, Claude Desktop and Codex CLI can also add `https://genie.paymanai.com/mcp`
+directly as a remote server with OAuth. That only works once Payman has registered the
+host's OAuth client, because Genie has no dynamic client registration; see
+[Integrating Genie without the bridge](#integrating-genie-without-the-bridge).
+Until then, or when in doubt, use the bridge above; it works everywhere.
 
 ### 3. Sign the user in
 
@@ -114,9 +115,10 @@ in to Genie, and that `npx -y @paymanai/genie-mcp-stdio logout` signs them out e
 
 [Genie](https://genie.paymanai.com) is Payman's payments agent. It is reachable as a
 remote MCP server (`https://genie.paymanai.com/mcp`, Streamable HTTP) exposing one tool,
-`ask_genie`. Many desktop agent hosts still only launch **local stdio** MCP servers —
-[OpenMausBot](https://github.com/milind-soni/OpenMausBot), Claude Desktop, Codex CLI and
-others. This package is the missing inch: a local process that speaks stdio to the host
+`ask_genie`. Some hosts, like [OpenMausBot](https://github.com/milind-soni/OpenMausBot),
+only launch **local stdio** MCP servers. Others, like Claude Code, Claude Desktop and Codex
+CLI, can connect to remote MCP URLs, but Genie only accepts OAuth clients that Payman has
+registered. This package works for both today: a local process that speaks stdio to the host
 and Streamable HTTP to Genie, forwarding tools verbatim and relaying Genie's
 elicitation prompts back to the host when the host supports them.
 
