@@ -1,3 +1,4 @@
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
   StreamableHTTPClientTransport,
@@ -16,9 +17,11 @@ import {
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { credentialHeaders, type BridgeConfig } from "./config.js";
+import { CredentialStore } from "./credentials.js";
+import { GenieAccountProvider } from "./oauth.js";
 
 export const BRIDGE_NAME = "genie-mcp-stdio";
-export const BRIDGE_VERSION = "0.1.0";
+export const BRIDGE_VERSION = "0.2.0";
 
 export type Log = (message: string) => void;
 
@@ -30,12 +33,18 @@ export type Log = (message: string) => void;
  */
 export class GenieBridge {
   private readonly server: Server;
+  private readonly account: GenieAccountProvider | undefined;
   private remote: Promise<Client> | undefined;
 
   constructor(
     private readonly config: BridgeConfig,
     private readonly log: Log,
+    credentials: CredentialStore,
   ) {
+    this.account =
+      config.credential.kind === "account"
+        ? new GenieAccountProvider(config.url, credentials, config.credential, log)
+        : undefined;
     this.server = new Server(
       { name: BRIDGE_NAME, version: BRIDGE_VERSION },
       { capabilities: { tools: { listChanged: true } } },
@@ -93,12 +102,38 @@ export class GenieBridge {
     client.onerror = (error) => {
       this.log(`Genie session error: ${error.message}`);
     };
-    const transport = new StreamableHTTPClientTransport(this.config.url, {
-      requestInit: { headers: credentialHeaders(this.config.credential) },
-    });
-    await client.connect(transport);
+    await this.connectRemote(client);
     this.log(`Connected to Genie at ${this.config.url.href}`);
     return client;
+  }
+
+  /**
+   * Account mode: sign in first when nothing is stored, and once more if Genie no longer
+   * accepts the stored refresh token; the SDK refreshes the access token on 401 by itself.
+   */
+  private async connectRemote(client: Client): Promise<void> {
+    if (this.account === undefined) {
+      await client.connect(this.transport());
+      return;
+    }
+    if (this.account.tokens() === undefined) await this.account.signIn();
+    try {
+      await client.connect(this.transport());
+    } catch (error) {
+      if (!(error instanceof UnauthorizedError)) throw error;
+      this.log("Genie no longer accepts the stored sign-in; signing in again.");
+      this.account.invalidateCredentials("tokens");
+      await this.account.signIn();
+      await client.connect(this.transport());
+    }
+  }
+
+  private transport(): StreamableHTTPClientTransport {
+    return new StreamableHTTPClientTransport(this.config.url, {
+      authProvider: this.account,
+      fetch: this.account?.fetch,
+      requestInit: { headers: credentialHeaders(this.config.credential) },
+    });
   }
 
   private async closeRemote(): Promise<void> {

@@ -26,8 +26,16 @@ test("integration key needs the customer id and maps to the Genie headers", () =
   assert.equal(describeConfig(config), "http://localhost:8082/mcp (integration key for customer cust-1)");
 });
 
-test("refuses no credential, two credentials, and a plaintext remote URL", () => {
-  assert.throws(() => readConfig({}), /No Genie credential/);
+test("no credential variables means the signed-in account, with the preregistered client", () => {
+  const config = readConfig({});
+  assert.deepEqual(config.credential, { kind: "account", clientId: "genie-mcp-stdio", browserCommand: undefined });
+  assert.deepEqual(credentialHeaders(config.credential), {});
+  assert.equal(describeConfig(config), "https://genie.paymanai.com/mcp (signed-in Genie account, client genie-mcp-stdio)");
+  const local = readConfig({ GENIE_OAUTH_CLIENT_ID: "dev-bridge", GENIE_BROWSER_COMMAND: "firefox" });
+  assert.deepEqual(local.credential, { kind: "account", clientId: "dev-bridge", browserCommand: "firefox" });
+});
+
+test("refuses two credentials and a plaintext remote URL", () => {
   assert.throws(() => readConfig({ GENIE_ACCESS_TOKEN: "t", GENIE_INTEGRATION_KEY: "k" }), /only one/);
   assert.throws(
     () => readConfig({ GENIE_ACCESS_TOKEN: "t", GENIE_MCP_URL: "http://genie.example.com/mcp" }),
