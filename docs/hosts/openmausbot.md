@@ -1,5 +1,9 @@
 # Genie in OpenMausBot
 
+> **Have a coding agent do this.** Paste into it:
+> `Integrate Genie into OpenMausBot by following the "For agents" section of https://raw.githubusercontent.com/PaymanAI/genie-mcp-stdio/main/README.md exactly.`
+> The rest of this page is the same procedure for humans.
+
 [OpenMausBot](https://github.com/milind-soni/OpenMausBot) launches custom MCP servers as
 local stdio commands and does not yet accept remote MCP URLs. `genie-mcp-stdio` bridges
 that gap so any bot in the sidebar can call Genie.

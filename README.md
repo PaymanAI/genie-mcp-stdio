@@ -2,29 +2,51 @@
 
 Genie for any stdio-only MCP host.
 
-[Genie](https://genie.paymanai.com) is Payman's payments agent. It is reachable as a
-remote MCP server (`https://genie.paymanai.com/mcp`, Streamable HTTP) exposing one tool,
-`ask_genie`. Many desktop agent hosts still only launch **local stdio** MCP servers —
-[OpenMausBot](https://github.com/milind-soni/OpenMausBot), Claude Desktop, Codex CLI and
-others. This package is the missing inch: a local process that speaks stdio to the host
-and Streamable HTTP to Genie, forwarding tools verbatim and relaying Genie's
-elicitation prompts back to the host when the host supports them.
+> **Using an AI coding agent? Don't read this — hand it over.** Paste this into
+> Claude Code, Codex, Cursor, or whatever you use:
+>
+> ```text
+> Integrate Genie (Payman's payments agent) into my MCP host by following the
+> "For agents" section of https://raw.githubusercontent.com/PaymanAI/genie-mcp-stdio/main/README.md
+> exactly. Detect which host I use, add the server, run the sign-in, and verify.
+> ```
+>
+> Your agent will add one server entry, open your browser once for you to sign in to
+> Genie, and confirm the connection. Nothing to copy, no keys to obtain.
 
-It decides nothing. You sign in to your own Genie account once in the browser; the bridge
-keeps that sign-in in a private file and never puts a secret in a host's configuration,
-tool output or logs.
+## For agents
 
-## Requirements
+You are integrating Genie into the user's MCP host. Follow these steps in order. Do not
+improvise credentials: **there are no API keys, tokens or client ids to obtain or ask the
+user for.** The sign-in is a browser flow the bridge runs itself.
 
-- Node.js 20 or newer on the machine running the host (`npx` comes with it).
-- A Genie account — the sign-in page offers to create one.
-- An MCP host that launches stdio servers. That is every host below; if yours can
-  connect to remote MCP URLs directly, you don't need this bridge — see
-  [Integrating Genie without the bridge](#integrating-genie-without-the-bridge).
+### 1. Check prerequisites
 
-## Quick start
+```bash
+node --version   # must print v20 or newer
+```
 
-Add this server to your host, then talk to the agent:
+If Node is missing or older than 20, install Node 20+ (or tell the user to) before
+continuing. Nothing else is needed; `npx` fetches the bridge on first run.
+
+### 2. Detect the host and add the server
+
+Look for the host's config in this order; use the first that exists on the machine (or
+the one the user named). Add the `genie` entry, merging into any existing `mcpServers`
+object rather than replacing the file. **Add no `env` block.**
+
+| Host | Config file | Entry |
+|---|---|---|
+| OpenMausBot | `~/.openmausbot/config.json` | JSON below, under `mcpServers` |
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` | JSON below, under `mcpServers` |
+| Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` | JSON below, under `mcpServers` |
+| Claude Code | run `claude mcp add genie -- npx -y @paymanai/genie-mcp-stdio` | — |
+| Cursor | `~/.cursor/mcp.json` (global) or `<project>/.cursor/mcp.json` | JSON below, under `mcpServers` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | JSON below, under `mcpServers` |
+| Codex CLI | `~/.codex/config.toml` | TOML below |
+| Anything else that launches stdio MCP servers | its MCP config | command `npx`, args `-y @paymanai/genie-mcp-stdio`, no env |
+
+JSON entry:
 
 ```json
 {
@@ -37,45 +59,7 @@ Add this server to your host, then talk to the agent:
 }
 ```
 
-No secrets in the config. The first time the agent calls Genie, the bridge opens your
-browser to sign in to your Genie account and approve the connection; after that it keeps
-you signed in. Ask the agent anything Genie can do — “pay my rent from checking”, “what
-did I spend at Lyft last month” — and it calls `ask_genie`.
-
-To sign in ahead of time (or on a machine where the host can't reach your browser), run:
-
-```bash
-npx -y @paymanai/genie-mcp-stdio login
-```
-
-## Host-by-host
-
-### OpenMausBot
-
-Settings → **Custom MCP servers** → add `genie` with command `npx` and arguments
-`-y @paymanai/genie-mcp-stdio`, or paste the Quick start block into
-`~/.openmausbot/config.json`. Then enable `genie` in the bot's **Tools**. Full walkthrough
-with troubleshooting: [docs/hosts/openmausbot.md](docs/hosts/openmausbot.md).
-
-### Claude Desktop
-
-Paste the Quick start block into `claude_desktop_config.json` (Claude → Settings →
-Developer → Edit Config), which lives at:
-
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-Restart Claude Desktop; Genie appears under the tools icon.
-
-### Cursor
-
-Paste the Quick start block into `~/.cursor/mcp.json` (all projects) or
-`.cursor/mcp.json` in a project. Cursor supports MCP elicitation, so Genie's
-“connect a finance provider” prompt appears in the chat.
-
-### Codex CLI
-
-Codex configures MCP servers in TOML. Add to `~/.codex/config.toml`:
+TOML entry (Codex CLI):
 
 ```toml
 [mcp_servers.genie]
@@ -83,13 +67,61 @@ command = "npx"
 args = ["-y", "@paymanai/genie-mcp-stdio"]
 ```
 
-### Any other stdio host
+If the host supports remote MCP URLs natively with OAuth (some do), you may instead add
+`https://genie.paymanai.com/mcp` as a remote server — but only if the host lets Genie
+preregister its client id; see [Integrating Genie without the bridge](#integrating-genie-without-the-bridge).
+When in doubt, use the bridge above; it works everywhere.
 
-The bridge is a plain stdio MCP server: `command` is `npx`, `args` are
-`-y @paymanai/genie-mcp-stdio`, no environment variables. If your host lets you set a
-working directory, any directory is fine. If it runs servers without access to your
-desktop session (a daemon, a container), run `login` once from a terminal as the same
-user first, or set `GENIE_CREDENTIALS_FILE` to a path both can read.
+### 3. Sign the user in
+
+Run this in a terminal the user can see, and tell them a browser window will open:
+
+```bash
+npx -y @paymanai/genie-mcp-stdio login
+```
+
+It prints `Signed in to Genie.` and `Sign-in stored in …/genie-mcp-stdio/credentials.json`
+on success. If no browser opens, give the user the URL printed after
+`Sign in to Genie in your browser:`. It waits up to five minutes. You can skip this step —
+the bridge signs in on the first tool call instead — but running it now means the user's
+first message doesn't stall on a browser.
+
+### 4. Verify
+
+Restart the host (or reload its MCP servers). Confirm a server named `genie` exposing the
+tool `ask_genie` appears. Then have the user (or the host's agent) send Genie a harmless
+message such as "what can you do?" and check that a reply comes back. On first use Genie
+asks the user to connect a finance provider — that is expected and happens in Genie's own
+UI, not in the host.
+
+### 5. Report back
+
+Tell the user, in one or two lines: which config file you changed, that they are signed
+in to Genie, and that `npx -y @paymanai/genie-mcp-stdio logout` signs them out everywhere.
+
+### Do not
+
+- Do not set `GENIE_ACCESS_TOKEN`, `GENIE_INTEGRATION_KEY`, `GENIE_OAUTH_CLIENT_ID` or any
+  other `GENIE_*` variable. They exist for Payman's own deployments and integrators; a
+  person's setup uses none of them, and asking the user for such values is a red flag.
+- Do not copy `credentials.json` into the host's config or anywhere else.
+- Do not ask the user for their Genie password; the bridge never sees it either.
+
+---
+
+## What this is
+
+[Genie](https://genie.paymanai.com) is Payman's payments agent. It is reachable as a
+remote MCP server (`https://genie.paymanai.com/mcp`, Streamable HTTP) exposing one tool,
+`ask_genie`. Many desktop agent hosts still only launch **local stdio** MCP servers —
+[OpenMausBot](https://github.com/milind-soni/OpenMausBot), Claude Desktop, Codex CLI and
+others. This package is the missing inch: a local process that speaks stdio to the host
+and Streamable HTTP to Genie, forwarding tools verbatim and relaying Genie's
+elicitation prompts back to the host when the host supports them.
+
+It decides nothing. You sign in to your own Genie account once in the browser; the bridge
+keeps that sign-in in a private file and never puts a secret in a host's configuration,
+tool output or logs.
 
 ## Commands
 
@@ -114,15 +146,15 @@ The refresh token is stored in `~/.config/genie-mcp-stdio/credentials.json`
 host's configuration, tool output or logs. `logout` revokes it at Genie (RFC 7009) before
 deleting it, so a copied file stops working too.
 
-## Configuration
+## Configuration (you almost certainly don't need this)
 
-Nothing is required. These are for local Genie stacks, CI, and organizations integrating
-on their own behalf rather than as a person:
+A person's setup uses no environment variables at all. These exist for Payman's own local
+Genie stacks, CI, and organizations integrating on their own behalf rather than as a person:
 
 | Variable | Meaning |
 |---|---|
 | `GENIE_MCP_URL` | Defaults to `https://genie.paymanai.com/mcp`. Must be `https`; plain `http` is accepted only for loopback (local Genie stacks). |
-| `GENIE_OAUTH_CLIENT_ID` | Native client id preregistered at that Genie; defaults to `genie-mcp-stdio`. |
+| `GENIE_OAUTH_CLIENT_ID` | Leave unset. Defaults to `genie-mcp-stdio`, the bridge's own preregistered public client id (not a secret). Only a self-hosted Genie, or a fork we registered separately, sets this. |
 | `GENIE_BROWSER_COMMAND` | Command (space-separated) that receives the sign-in URL; defaults to the OS opener. |
 | `GENIE_CREDENTIALS_FILE` | Where the sign-in is stored; defaults as above. |
 | `GENIE_ACCESS_TOKEN` | Bypass the account sign-in with a Genie OAuth access token you obtained elsewhere (expires; no refresh). |
