@@ -1,0 +1,40 @@
+{
+  "name": "@paymanai/genie-mcp-stdio",
+  "version": "0.1.0",
+  "description": "Genie for any stdio-only MCP host: a local stdio bridge to the remote Genie MCP server",
+  "license": "MIT",
+  "author": "Payman",
+  "type": "module",
+  "bin": {
+    "genie-mcp-stdio": "dist/src/index.js"
+  },
+  "files": [
+    "dist/src",
+    "README.md",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
+    "prepublishOnly": "npm test"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "genie",
+    "payman",
+    "stdio",
+    "payments"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.5.2",
+    "typescript": "5.9.2"
+  }
+}
