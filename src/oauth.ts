@@ -15,7 +15,9 @@ import type {
 import type { CredentialStore } from "./credentials.js";
 
 export const DEFAULT_CLIENT_ID = "genie-mcp-stdio";
-export const SCOPE = "genie:ask";
+// `genie:ask` talks to Genie; `genie:self` lets the assistant read and manage its own agent
+// record (name, connection access, access requests) without a browser trip (ADR-0026).
+export const SCOPE = "genie:ask genie:self";
 const CALLBACK_PATH = "/callback";
 // A first sign-in can include account creation and a passkey; five minutes proved too short.
 const SIGN_IN_TIMEOUT_MS = 15 * 60 * 1000;

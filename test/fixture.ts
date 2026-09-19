@@ -54,7 +54,7 @@ export class FakeGenie {
     if (authorizations + keys !== 1 || !this.accepts(req.headers)) {
       const origin = `http://${req.headers.host ?? "127.0.0.1"}`;
       res.writeHead(401, {
-        "www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp", scope="genie:ask"`,
+        "www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp", scope="genie:ask genie:self"`,
       });
       res.end();
       return;

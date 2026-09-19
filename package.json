@@ -1,6 +1,6 @@
 {
   "name": "@paymanai/genie-mcp-stdio",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Genie for any stdio-only MCP host: a local stdio bridge to the remote Genie MCP server",
   "license": "MIT",
   "author": "Payman",

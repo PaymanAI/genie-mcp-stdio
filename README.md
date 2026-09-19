@@ -90,7 +90,7 @@ first message doesn't stall on a browser.
 ### 4. Verify
 
 Restart the host (or reload its MCP servers). Confirm a server named `genie` exposing the
-tool `ask_genie` appears. Its single argument is `request` — the person's ask, in plain
+tool `ask_genie` (and the four `*_genie_agent` / `*_genie_access` self-service tools) appears. Its single argument is `request` — the person's ask, in plain
 words (`{"request": "what can you help me with?"}`). Have the user (or the host's agent)
 send Genie a harmless request like that and check that a reply comes back. On first use Genie
 asks the user to connect a finance provider — that is expected and happens in Genie's own
@@ -173,8 +173,13 @@ Setting both bypass variables is refused, because Genie refuses a request that c
 
 ## What the host sees
 
-- Tools: whatever Genie lists — today exactly `ask_genie`, which takes one argument,
-  `request`: what the person wants, in plain words. `tools/list_changed` is forwarded.
+- Tools: whatever Genie lists — today `ask_genie`, which takes one argument, `request`:
+  what the person wants, in plain words, plus four self-service tools the assistant uses to
+  manage its own Genie record (`get_genie_agent`, `rename_genie_agent`,
+  `grant_genie_read_access`, `request_genie_access`) — read-only access it can grant itself;
+  full access it asks for and the person approves on Genie's Agents page. Sign-ins made by
+  bridge 0.3.x carry only `genie:ask`; run `npx -y @paymanai/genie-mcp-stdio logout`, then sign in again, to
+  pick up `genie:self`. `tools/list_changed` is forwarded.
 - Elicitation: Genie asks the person to connect their account and pick a finance
   provider on first use. If the host declared the `elicitation` capability the prompt
   is relayed to it; otherwise Genie's reply explains what to do instead.
@@ -234,11 +239,12 @@ client registration.
    so open it after `initialize`. Sessions are bound to the authenticated caller via
    `Mcp-Session-Id`; a new process needs a new session.
 2. **Discovery.** An unauthenticated request returns `401` with
-   `WWW-Authenticate: Bearer resource_metadata="https://genie.paymanai.com/.well-known/oauth-protected-resource/mcp", scope="genie:ask"`
+   `WWW-Authenticate: Bearer resource_metadata="https://genie.paymanai.com/.well-known/oauth-protected-resource/mcp", scope="genie:ask genie:self"`
    (RFC 9728). That document names the authorization server, whose RFC 8414 metadata lists
    the authorize, token, revocation and JWKS endpoints.
 3. **Authorization.** Authorization code with S256 PKCE, `token_endpoint_auth_method: none`,
-   scope `genie:ask`, and the `resource` parameter set to the MCP URL (RFC 8707). There is no
+   scope `genie:ask genie:self` (`genie:ask` alone still works, without the self-service
+   tools), and the `resource` parameter set to the MCP URL (RFC 8707). There is no
    dynamic client registration: **ask us to preregister your host** with its `client_id`,
    display name and exact redirect URIs (open an issue on this repository). Registered
    loopback redirects for native apps match on any port; everything else matches exactly.
