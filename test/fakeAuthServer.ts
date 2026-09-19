@@ -37,7 +37,7 @@ export class FakeAuthServer {
         return json(res, {
           resource: `${this.origin}/mcp`,
           authorization_servers: [`${this.origin}/oauth`],
-          scopes_supported: ["yuki:ask"],
+          scopes_supported: ["genie:ask"],
         });
       case "/.well-known/oauth-authorization-server/oauth":
         return json(res, {
@@ -49,7 +49,7 @@ export class FakeAuthServer {
           grant_types_supported: ["authorization_code", "refresh_token"],
           code_challenge_methods_supported: ["S256"],
           token_endpoint_auth_methods_supported: ["none"],
-          scopes_supported: ["yuki:ask"],
+          scopes_supported: ["genie:ask"],
         });
       case "/oauth/authorize":
         return this.authorize(url, res);
@@ -78,7 +78,7 @@ export class FakeAuthServer {
       redirect.pathname === "/callback" &&
       q.get("code_challenge_method") === "S256" &&
       q.get("response_type") === "code" &&
-      q.get("scope") === "yuki:ask" &&
+      q.get("scope") === "genie:ask" &&
       q.get("resource") === `${this.origin}/mcp`;
     if (!registered) {
       res.writeHead(400).end("unregistered client or redirect");
@@ -123,7 +123,7 @@ export class FakeAuthServer {
     this.issued.push(access);
     this.liveAccess.add(access);
     this.liveRefresh.add(refresh);
-    return { access_token: access, refresh_token: refresh, token_type: "Bearer", expires_in: 3600, scope: "yuki:ask" };
+    return { access_token: access, refresh_token: refresh, token_type: "Bearer", expires_in: 3600, scope: "genie:ask" };
   }
 }
 

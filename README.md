@@ -234,11 +234,11 @@ client registration.
    so open it after `initialize`. Sessions are bound to the authenticated caller via
    `Mcp-Session-Id`; a new process needs a new session.
 2. **Discovery.** An unauthenticated request returns `401` with
-   `WWW-Authenticate: Bearer resource_metadata="https://genie.paymanai.com/.well-known/oauth-protected-resource/mcp", scope="yuki:ask"`
+   `WWW-Authenticate: Bearer resource_metadata="https://genie.paymanai.com/.well-known/oauth-protected-resource/mcp", scope="genie:ask"`
    (RFC 9728). That document names the authorization server, whose RFC 8414 metadata lists
    the authorize, token, revocation and JWKS endpoints.
 3. **Authorization.** Authorization code with S256 PKCE, `token_endpoint_auth_method: none`,
-   scope `yuki:ask`, and the `resource` parameter set to the MCP URL (RFC 8707). There is no
+   scope `genie:ask`, and the `resource` parameter set to the MCP URL (RFC 8707). There is no
    dynamic client registration: **ask us to preregister your host** with its `client_id`,
    display name and exact redirect URIs (open an issue on this repository). Registered
    loopback redirects for native apps match on any port; everything else matches exactly.
